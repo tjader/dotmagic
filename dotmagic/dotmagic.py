@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, DEVNULL
 import string
 import tempfile
 from shutil import which
@@ -32,8 +32,8 @@ class Cmd:
                 return fh.read()
         return self._proc.stdout.read()
 
-    def pipe(self, cmd, outfile=None):
-        return Cmd(cmd, self._proc.stdout, outfile=outfile)
+    def pipe(self, cmd, outfile=None, stdout=PIPE, stderr=None):
+        return Cmd(cmd, self._proc.stdout, stdout=stdout, stderr=stderr, outfile=outfile)
 
     def __or__(self, other):
         return self.pipe(other)
@@ -48,6 +48,9 @@ class DotMagics(Magics):
         self._opts = 'prsK:'
         self._tmpdir = tempfile.mkdtemp()
         self._inkscape = which("inkscape")
+        self._inkscape_v1 = False
+        if self._inkscape is not None:
+            self._inkscape_v1 = True  # TODO: check output of inkscape --version
 
 
     def _run_graphviz(self, s, output='svg', layout='dot'):
@@ -64,8 +67,13 @@ class DotMagics(Magics):
 
     def _svg_to_png(self, s):
         _, tmpf = tempfile.mkstemp(dir=self._tmpdir, suffix='.png')
-        cmd = ['inkscape', '-p', '-o', tmpf]
-        return s.pipe(cmd, outfile=tmpf)
+        if self._inkscape_v1:
+            cmd = ['inkscape', '-f', '/dev/stdin', '--export-png={}'.format(tmpf)]
+            stderr=DEVNULL
+        else:
+            cmd = ['inkscape', '-p', '-o', tmpf]
+            stderr=None
+        return s.pipe(cmd, stderr=stderr, outfile=tmpf)
 
     def _do_args(self, line):
         return self.parse_options(line, self._opts)
